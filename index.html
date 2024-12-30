@@ -6,6 +6,8 @@
     <title>Dashboard YouTube</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/5.11.3/main.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/5.11.3/main.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
@@ -71,7 +73,24 @@
 
     <script>
         const API_KEY = 'AIzaSyCPggMUGaZFzibbNZXXcWXcegd7UGaLt9E'; // Masukkan API Key Anda
-        let channels = JSON.parse(localStorage.getItem('channels')) || []; // Ambil data dari localStorage
+
+        // Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDGX9b1mlUCq4L6VUq8PK4VUV9yFQTgRMQ",
+            authDomain: "ytboard-19b3c.firebaseapp.com",
+            databaseURL: "https://ytboard-19b3c-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "ytboard-19b3c",
+            storageBucket: "ytboard-19b3c.appspot.com",
+            messagingSenderId: "1015440886697",
+            appId: "1:1015440886697:web:20983b28656148f00c92b8",
+            measurementId: "G-DE0LZSETRR"
+        };
+
+        // Initialize Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let channels = []; // Daftar channel diambil dari Firebase
 
         // Menampilkan waktu realtime
         function updateTime() {
@@ -80,9 +99,21 @@
         }
         setInterval(updateTime, 1000);
 
-        // Menyimpan data ke localStorage
-        function saveChannels() {
-            localStorage.setItem('channels', JSON.stringify(channels));
+        // Menyimpan data ke Firebase
+        function saveToFirebase(channel) {
+            const ref = db.ref('channels');
+            ref.push(channel);
+        }
+
+        // Mengambil data dari Firebase
+        function loadFromFirebase() {
+            const ref = db.ref('channels');
+            ref.on('value', (snapshot) => {
+                const data = snapshot.val();
+                channels = data ? Object.values(data) : [];
+                renderTable();
+                initCalendar();
+            });
         }
 
         // Mengambil data API YouTube
@@ -127,15 +158,10 @@
                 return;
             }
 
-            if (channels.some(ch => ch.id === channelId)) {
-                alert('Channel sudah ada di daftar!');
-                return;
-            }
-
             const data = await fetchChannelData(channelId);
             if (data) {
-                channels.push({ id: channelId, name: channelName, email, ...data });
-                saveChannels();
+                const channel = { id: channelId, name: channelName, email, ...data };
+                saveToFirebase(channel);
                 renderTable();
             } else {
                 alert('Gagal mengambil data. Pastikan ID channel benar.');
@@ -193,21 +219,24 @@
 
         // Fungsi tambahan (Update Remark, Update Schedule, Hapus Channel)
         function updateRemark(index, value) {
-            channels[index].remark = value;
-            saveChannels();
+            const ref = db.ref('channels');
+            const key = Object.keys(channels)[index];
+            ref.child(key).update({ remark: value });
         }
 
         function updateSchedule(index, value) {
-            channels[index].uploadSchedule = value;
-            saveChannels();
-            initCalendar(); // Refresh kalender
+            const ref = db.ref('channels');
+            const key = Object.keys(channels)[index];
+            ref.child(key).update({ uploadSchedule: value });
+            initCalendar();
         }
 
         function removeChannel(channelId) {
-            channels = channels.filter(ch => ch.id !== channelId);
-            saveChannels();
-            renderTable();
-            initCalendar();
+            const ref = db.ref('channels');
+            ref.orderByChild('id').equalTo(channelId).once('value', (snapshot) => {
+                const key = Object.keys(snapshot.val())[0];
+                ref.child(key).remove();
+            });
         }
 
         // Filter data
@@ -222,8 +251,7 @@
         }
 
         // Load pertama kali
-        renderTable();
-        initCalendar();
+        loadFromFirebase();
         updateTime();
     </script>
 </body>
