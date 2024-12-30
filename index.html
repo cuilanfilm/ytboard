@@ -157,16 +157,17 @@
                 alert('Semua data harus diisi!');
                 return;
             }
-
+            
+            // Simpan ke database (contoh Firebase)
             const data = await fetchChannelData(channelId);
             if (data) {
                 const channel = { id: channelId, name: channelName, email, ...data };
-                saveToFirebase(channel);
-                renderTable();
+                saveToFirebase(channel); // Simpan ke Firebase
+                renderTable(); // Perbarui tabel
             } else {
                 alert('Gagal mengambil data. Pastikan ID channel benar.');
             }
-
+            // Kosongkan input
             document.getElementById('channelName').value = '';
             document.getElementById('channelId').value = '';
             document.getElementById('email').value = '';
