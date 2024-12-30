@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard YouTube</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/5.11.3/main.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/5.11.3/main.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background-color: #f4f4f4; cursor: pointer; }
+        input, button, select { padding: 8px; margin: 5px; }
+        .form-group { margin-bottom: 10px; }
+        .channel-img { width: 50px; height: 50px; border-radius: 50%; }
+        .channel-banner { width: 100%; height: 100px; object-fit: cover; }
+        #calendar { max-width: 900px; margin: 20px auto; }
+    </style>
+</head>
+<body>
+    <h1>Dashboard YouTube</h1>
+    <p id="time"></p>
+
+    <div>
+        <h2>Tambah Channel</h2>
+        <div class="form-group">
+            <label for="channelName">Nama Channel:</label>
+            <input type="text" id="channelName" placeholder="Masukkan Nama Channel">
+        </div>
+        <div class="form-group">
+            <label for="channelId">ID Channel:</label>
+            <input type="text" id="channelId" placeholder="Masukkan ID Channel">
+        </div>
+        <div class="form-group">
+            <label for="email">Email:</label>
+            <input type="email" id="email" placeholder="Masukkan Email">
+        </div>
+        <button onclick="addChannel()">Tambah Channel</button>
+        <button onclick="refreshDashboard()">Refresh Sekarang</button>
+        <select id="filter" onchange="applyFilter()">
+            <option value="">Semua Kategori</option>
+            <option value="Gaming">Gaming</option>
+            <option value="Education">Education</option>
+            <option value="Entertainment">Entertainment</option>
+        </select>
+    </div>
+
+    <table id="youtubeTable">
+        <thead>
+            <tr>
+                <th>No.</th>
+                <th>Foto Profil</th>
+                <th>Nama Channel</th>
+                <th>ID Channel</th>
+                <th>Email</th>
+                <th>Banner</th>
+                <th>Kategori</th>
+                <th>Subscriber Count</th>
+                <th>View Count</th>
+                <th>Upload Terakhir</th>
+                <th>Remark</th>
+                <th>Jadwal Upload</th>
+                <th>Aksi</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <div id="calendar"></div>
+
+    <script>
+        const API_KEY = 'AIzaSyCPggMUGaZFzibbNZXXcWXcegd7UGaLt9E'; // Masukkan API Key Anda
+        let channels = JSON.parse(localStorage.getItem('channels')) || []; // Ambil data dari localStorage
+
+        // Menampilkan waktu realtime
+        function updateTime() {
+            const timeElement = document.getElementById('time');
+            timeElement.textContent = `Waktu sekarang: ${new Date().toLocaleString()}`;
+        }
+        setInterval(updateTime, 1000);
+
+        // Menyimpan data ke localStorage
+        function saveChannels() {
+            localStorage.setItem('channels', JSON.stringify(channels));
+        }
+
+        // Mengambil data API YouTube
+        async function fetchChannelData(channelId) {
+            const response = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet,brandingSettings,contentDetails&id=${channelId}&key=${API_KEY}`);
+            const data = await response.json();
+            if (data.items && data.items.length > 0) {
+                const channel = data.items[0];
+                const uploadsPlaylistId = channel.contentDetails.relatedPlaylists.uploads;
+
+                // Fetch upload terakhir
+                const uploadResponse = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${uploadsPlaylistId}&maxResults=1&key=${API_KEY}`);
+                const uploadData = await uploadResponse.json();
+                const lastUpload = uploadData.items[0]?.snippet || {};
+
+                return {
+                    name: channel.snippet.title,
+                    email: '', // Email diinput manual
+                    category: channel.snippet.category || "N/A",
+                    subscribers: channel.statistics.subscriberCount,
+                    views: channel.statistics.viewCount,
+                    profileImage: channel.snippet.thumbnails.default.url,
+                    bannerImage: channel.brandingSettings.image?.bannerExternalUrl || "",
+                    lastUploadDate: lastUpload.publishedAt || "N/A",
+                    lastUploadTitle: lastUpload.title || "N/A",
+                    remark: "",
+                    uploadSchedule: "",
+                    directLink: `https://studio.youtube.com/channel/${channelId}`
+                };
+            }
+            return null;
+        }
+
+        // Tambah channel
+        async function addChannel() {
+            const channelName = document.getElementById('channelName').value.trim();
+            const channelId = document.getElementById('channelId').value.trim();
+            const email = document.getElementById('email').value.trim();
+
+            if (!channelName || !channelId || !email) {
+                alert('Semua data harus diisi!');
+                return;
+            }
+
+            if (channels.some(ch => ch.id === channelId)) {
+                alert('Channel sudah ada di daftar!');
+                return;
+            }
+
+            const data = await fetchChannelData(channelId);
+            if (data) {
+                channels.push({ id: channelId, name: channelName, email, ...data });
+                saveChannels();
+                renderTable();
+            } else {
+                alert('Gagal mengambil data. Pastikan ID channel benar.');
+            }
+
+            document.getElementById('channelName').value = '';
+            document.getElementById('channelId').value = '';
+            document.getElementById('email').value = '';
+        }
+
+        // Render tabel
+        function renderTable() {
+            const tableBody = document.querySelector('#youtubeTable tbody');
+            tableBody.innerHTML = '';
+
+            if (channels.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="13">Belum ada channel yang ditambahkan.</td></tr>';
+                return;
+            }
+
+            channels.forEach((channel, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td><img src="${channel.profileImage}" alt="Profil" class="channel-img"></td>
+                    <td>${channel.name}</td>
+                    <td>${channel.id}</td>
+                    <td>${channel.email}</td>
+                    <td><img src="${channel.bannerImage}" alt="Banner" class="channel-banner"></td>
+                    <td>${channel.category}</td>
+                    <td>${channel.subscribers}</td>
+                    <td>${channel.views}</td>
+                    <td>${channel.lastUploadTitle} (${channel.lastUploadDate})</td>
+                    <td><input type="text" value="${channel.remark}" onchange="updateRemark(${index}, this.value)"></td>
+                    <td><input type="text" value="${channel.uploadSchedule}" onchange="updateSchedule(${index}, this.value)"></td>
+                    <td><a href="${channel.directLink}" target="_blank">Dashboard</a> | <button onclick="removeChannel('${channel.id}')">Hapus</button></td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Inisialisasi kalender
+        function initCalendar() {
+            const calendarEl = document.getElementById('calendar');
+            const calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                events: channels.map((ch, index) => ({
+                    id: index,
+                    title: `Upload: ${ch.name}`,
+                    date: ch.uploadSchedule
+                }))
+            });
+            calendar.render();
+        }
+
+        // Fungsi tambahan (Update Remark, Update Schedule, Hapus Channel)
+        function updateRemark(index, value) {
+            channels[index].remark = value;
+            saveChannels();
+        }
+
+        function updateSchedule(index, value) {
+            channels[index].uploadSchedule = value;
+            saveChannels();
+            initCalendar(); // Refresh kalender
+        }
+
+        function removeChannel(channelId) {
+            channels = channels.filter(ch => ch.id !== channelId);
+            saveChannels();
+            renderTable();
+            initCalendar();
+        }
+
+        // Filter data
+        function applyFilter() {
+            const filter = document.getElementById('filter').value;
+            if (filter) {
+                const filtered = channels.filter(ch => ch.category === filter);
+                renderTable(filtered);
+            } else {
+                renderTable();
+            }
+        }
+
+        // Load pertama kali
+        renderTable();
+        initCalendar();
+        updateTime();
+    </script>
+</body>
+</html>
